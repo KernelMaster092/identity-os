@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>IdentityOS | Cloud Sync</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -29,6 +29,50 @@
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .animate-fade { animation: fadeIn 0.3s ease-out forwards; }
         .hidden { display: none !important; }
+    
+        /* MOBILE RESPONSIVE OVERRIDES */
+        @media (max-width: 768px) {
+            .app-container { 
+                flex-direction: column !important; 
+                height: auto !important; 
+                min-height: 100vh; 
+            }
+            .sidebar { 
+                width: 100% !important; 
+                height: auto !important; 
+                border-right: none !important; 
+                border-bottom: 1px solid rgba(255,255,255,0.1) !important; 
+                padding: 1.5rem !important;
+            }
+            .main-content { 
+                width: 100% !important; 
+                overflow-y: auto !important; 
+            }
+            .data-row { 
+                flex-wrap: wrap !important; 
+                gap: 0.5rem !important; 
+                padding: 0.75rem !important; 
+            }
+            .data-row > div { 
+                flex: 1 1 auto !important; 
+            }
+            .data-row div.flex-1 { 
+                min-width: 120px !important; 
+            }
+            #authScreen { 
+                padding: 1rem !important; 
+            }
+            #authScreen > div { 
+                padding: 1.5rem !important; 
+            }
+            .grid-cols-12 { 
+                grid-template-columns: 1fr !important; 
+            }
+            .md\:col-span-9, .md\:col-span-3 { 
+                grid-column: span 1 / span 1 !important; 
+            }
+        }
+    
     </style>
 </head>
 <body class="antialiased">
