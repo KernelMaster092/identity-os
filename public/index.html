@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IdentityOS | Cloud Sync</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root { --bg-main: #0f172a; --bg-card: #1e293b; --accent: #6366f1; --accent-hover: #4f46e5; --text-muted: #94a3b8; }
+        body { font-family: 'Inter', sans-serif; background-color: var(--bg-main); color: #f8fafc; overflow-x: hidden; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .app-container { display: flex; height: 100vh; width: 100vw; }
+        .sidebar { background: #020617; border-right: 1px solid rgba(255,255,255,0.05); display: flex; flex-direction: column; z-index: 100; }
+        .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; width: 100%; }
+        .glass-input { background: #0f172a; border: 1px solid #334155; transition: all 0.2s ease; }
+        .glass-input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2); }
+        .group-container { background: rgba(30, 41, 59, 0.3); border: 1px solid rgba(255,255,255,0.05); margin-bottom: 1.5rem; border-radius: 0.75rem; overflow: hidden; }
+        .data-row { transition: all 0.1s ease; border-bottom: 1px solid rgba(255,255,255,0.03); display: flex; align-items: center; gap: 0.75rem; padding: 0.4rem 0.75rem; }
+        .data-row:last-child { border-bottom: none; }
+        .data-row:hover { background: rgba(255,255,255,0.03); }
+        .data-row.active-acc { background: rgba(16, 185, 129, 0.06); color: #d1fae5; }
+        .custom-scroll::-webkit-scrollbar { width: 6px; }
+        .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+        .btn-primary { background: var(--accent); transition: all 0.2s; position: relative; }
+        .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
+        .btn-primary:disabled { opacity: 0.7; cursor: not-allowed; transform: none; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade { animation: fadeIn 0.3s ease-out forwards; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body class="antialiased">
+    <!-- Auth Screen -->
+    <div id="authScreen" class="fixed inset-0 z-[200] bg-slate-950 flex items-center justify-center p-4">
+        <div class="w-full max-w-md bg-slate-900 border border-white/10 p-8 rounded-3xl shadow-2xl">
+            <div class="text-center mb-8">
+                <div class="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-indigo-500/20">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.117 6.84l-.054.09a13.916 13.916 0 01-3.44 2.04" />
+                    </svg>
+                </div>
+                <h2 class="text-3xl font-bold text-white">Welcome Back</h2>
+                <p class="text-slate-400 mt-2">Sync your identities across all devices</p>
+            </div>
+            
+            <div id="loginForm" class="space-y-4">
+                <input type="email" id="authEmail" placeholder="Email" class="w-full glass-input rounded-xl px-4 py-3 text-white">
+                <input type="password" id="authPass" placeholder="Password" class="w-full glass-input rounded-xl px-4 py-3 text-white">
+                <button id="loginBtn" onclick="handleAuth('login')" class="btn-primary w-full py-3 rounded-xl font-bold text-white flex items-center justify-center gap-2">
+                    <div id="loginSpinner" class="hidden w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    <span>Sign In</span>
+                </button>
+                <p class="text-center text-sm text-slate-500">Don't have an account? <a href="#" onclick="toggleAuthMode(true)" class="text-indigo-400 hover:underline">Create one</a></p>
+            </div>
+
+            <div id="signupForm" class="space-y-4 hidden">
+                <input type="email" id="regEmail" placeholder="Email" class="w-full glass-input rounded-xl px-4 py-3 text-white">
+                <input type="password" id="regPass" placeholder="Password" class="w-full glass-input rounded-xl px-4 py-3 text-white">
+                <button id="signupBtn" onclick="handleAuth('signup')" class="btn-primary w-full py-3 rounded-xl font-bold text-white flex items-center justify-center gap-2">
+                    <div id="signupSpinner" class="hidden w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    <span>Sign Up</span>
+                </button>
+                <p class="text-center text-sm text-slate-500">Already have an account? <a href="#" onclick="toggleAuthMode(false)" class="text-indigo-400 hover:underline">Sign In</a></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- App Wrapper -->
+    <div id="appWrapper" class="app-container hidden">
+        <aside id="sidebar" class="sidebar p-6 w-[280px]">
+            <div class="flex items-center justify-between mb-10">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.117 6.84l-.054.09a13.916 13.916 0 01-3.44 2.04" />
+                        </svg>
+                    </div>
+                    <h1 class="text-xl font-bold tracking-tight">IdentityOS</h1>
+                </div>
+            </div>
+            <nav class="space-y-1 flex-1">
+                <p class="text-[10px] uppercase font-bold text-slate-500 tracking-widest mb-4 px-2">Global Control</p>
+                <button class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg bg-indigo-600/10 text-indigo-400 font-medium border border-indigo-600/20">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                    </svg>
+                    Identity Registry
+                </button>
+            </nav>
+            <div class="border-t border-white/5 pt-6 space-y-3">
+                <div id="userDisplay" class="text-[11px] text-slate-500 mono truncate mb-2 px-2">Loading...</div>
+                <button onclick="handleLogout()" class="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 text-sm font-medium transition-all">Sign Out</button>
+            </div>
+        </aside>
+        <main class="main-content">
+            <header class="h-16 border-b border-white/5 flex items-center justify-between px-4 md:px-8 bg-slate-900/50 backdrop-blur-xl">
+                <div class="flex items-center gap-2 text-sm">
+                    <span class="text-slate-500">Registry</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                    <span class="text-slate-200 font-medium">Cloud Matrix</span>
+                </div>
+                <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 text-indigo-400 text-xs font-medium border border-indigo-500/20">
+                        <span class="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse"></span>
+                        Neon Synced
+                    </div>
+                </div>
+            </header>
+            <div class="flex-1 overflow-y-auto p-4 md:p-8 custom-scroll">
+                <section class="max-w-5xl mx-auto">
+                    <div class="bg-slate-800/40 border border-white/5 rounded-2xl p-4 md:p-6 mb-8 shadow-xl">
+                        <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                            </svg>
+                            Add New Identity Group
+                        </h3>
+                        <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
+                            <div class="md:col-span-9">
+                                <input type="text" id="emailInput" placeholder="username@gmail.com" class="w-full glass-input rounded-xl px-4 py-3 text-white placeholder-slate-500 text-base">
+                            </div>
+                            <div class="md:col-span-3">
+                                <button id="generateBtn" onclick="generateGroup()" class="btn-primary w-full h-full px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 text-white">
+                                    <div id="btnSpinner" class="hidden w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                    <span id="btnText">Create Group</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div id="error" class="hidden mt-3 text-red-400 text-xs px-3 py-2 bg-red-400/10 border border-red-400/20 rounded-lg animate-fade">Invalid Gmail address detected.</div>
+                    </div>
+                    <div id="resultArea" class="animate-fade">
+                        <div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
+                            <div class="text-center sm:text-left">
+                                <h2 class="text-2xl font-bold text-white">Identity Registry</h2>
+                                <p class="text-sm text-slate-500"><span id="totalCount">0</span> total identities in cloud</p>
+                            </div>
+                            <div class="relative w-full sm:w-80">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                                <input type="text" id="searchInput" oninput="filterMatrix()" placeholder="Filter cloud groups..." class="w-full glass-input rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-slate-600">
+                            </div>
+                        </div>
+                        <div id="groupsList" class="space-y-6"></div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toasts -->
+    <div id="toast" class="fixed bottom-8 left-1/2 -translate-x-1/2 md:left-auto md:right-8 md:translate-x-0 translate-y-20 opacity-0 bg-indigo-600 text-white px-6 py-3 rounded-2xl font-semibold shadow-2xl transition-all duration-300 z-50 flex items-center gap-3">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+        </svg>
+        <span id="toastMessage">Saved!</span>
+    </div>
+
+    <div id="authError" class="fixed top-8 left-1/2 -translate-x-1/2 md:left-auto md:right-8 md:translate-x-0 -translate-y-20 opacity-0 bg-red-600 text-white px-6 py-3 rounded-2xl font-semibold shadow-2xl transition-all duration-300 z-[300] flex items-center gap-3">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <span id="authErrorMessage">Error occurred</span>
+    </div>
+
+    <script>
+        let groupRegistry = [];
+        let authToken = localStorage.getItem('token');
+        let currentUserEmail = localStorage.getItem('email');
+        const API_URL = '/api';
+
+        function toggleAuthMode(isSignup) {
+            document.getElementById('loginForm').classList.toggle('hidden', isSignup);
+            document.getElementById('signupForm').classList.toggle('hidden', !isSignup);
+        }
+
+        function showAuthError(msg) {
+            const errToast = document.getElementById('authError');
+            document.getElementById('authErrorMessage').textContent = msg;
+            errToast.classList.remove('-translate-y-20', 'opacity-0');
+            setTimeout(() => errToast.classList.add('-translate-y-20', 'opacity-0'), 3000);
+        }
+
+        async function handleAuth(type) {
+            const email = type === 'signup' ? document.getElementById('regEmail').value : document.getElementById('authEmail').value;
+            const password = type === 'signup' ? document.getElementById('regPass').value : document.getElementById('authPass').value;
+            
+            if(!email || !password) {
+                showAuthError("Please fill in all fields");
+                return;
+            }
+
+            const btn = document.getElementById(type === 'signup' ? 'signupBtn' : 'loginBtn');
+            const spinner = document.getElementById(type === 'signup' ? 'signupSpinner' : 'loginSpinner');
+
+            btn.disabled = true;
+            spinner.classList.remove('hidden');
+
+            try {
+                const res = await fetch(`${API_URL}/${type === 'signup' ? 'signup' : 'login'}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    if (type === 'login') {
+                        localStorage.setItem('token', data.token);
+                        localStorage.setItem('email', data.email);
+                        location.reload();
+                    } else {
+                        showToast("Account created!");
+                        toggleAuthMode(false);
+                    }
+                } else {
+                    showAuthError(data.error || "Authentication failed");
+                }
+            } catch (e) { 
+                showAuthError("Network error. Is the server running?"); 
+            } finally {
+                btn.disabled = false;
+                spinner.classList.add('hidden');
+            }
+        }
+
+        async function handleLogout() {
+            localStorage.clear();
+            location.reload();
+        }
+
+        window.onload = async () => {
+            if (authToken) {
+                document.getElementById('authScreen').classList.add('hidden');
+                document.getElementById('appWrapper').classList.remove('hidden');
+                document.getElementById('userDisplay').textContent = currentUserEmail;
+                await syncFromCloud();
+            }
+        };
+
+        async function syncFromCloud() {
+            try {
+                const res = await fetch(`${API_URL}/identities`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                const data = await res.json();
+                const groupsMap = {};
+                data.forEach(row => {
+                    if (!groupsMap[row.group_id]) {
+                        groupsMap[row.group_id] = { groupId: row.group_id, baseEmail: row.base_email, docId: row.group_id, identities: [] };
+                    }
+                    groupsMap[row.group_id].identities.push({ id: row.id, username: row.username, email: row.email, active: row.active });
+                });
+                groupRegistry = Object.values(groupsMap);
+                filterMatrix();
+            } catch (e) { console.error(e); }
+        }
+
+        async function saveGroupToCloud(group) {
+            await fetch(`${API_URL}/identities`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+                body: JSON.stringify(group)
+            });
+        }
+
+        async function updateCloudGroup(id, data) {
+            await fetch(`${API_URL}/identities/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+                body: JSON.stringify(data)
+            });
+        }
+
+        async function deleteCloudGroup(groupId) {
+            await fetch(`${API_URL}/identities/group/${groupId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${authToken}` }
+            });
+        }
+
+        const NAME_PARTS = {
+            prefix: ["Silent", "Swift", "Cyber", "Neon", "Iron", "Golden", "Lunar", "Zenith", "Pixel", "Hyper", "Nova", "Epic", "Bold", "Dark", "Aqua", "Crimson", "Solar", "Quantum", "Void", "Apex", "Wild", "Cosmic", "Alpha", "Omega", "Prime"],
+            suffix: ["Warrior", "Ghost", "Knight", "Coder", "Storm", "Wolf", "Hawk", "Phantom", "Rider", "Sage", "Titan", "Ace", "Shadow", "Blaze", "Pulse", "Vibe", "Flux", "Zest", "Wiz", "King", "Dreamer", "Hunter", "Seeker", "Slayer", "Soul"],
+            funny: ["Potato", "Nugget", "Socks", "Taco", "Muffin", "Banana", "Pickle", "Cheese", "Waffle", "Toaster", "Cucumber", "Spaghetti", "Panda", "Duckling", "Cloudy", "Juicy", "Bouncy", "Silly", "Gloomy", "Fancy", "Bean", "Mayo", "Kitten", "Dino", "Bagel"]
+        };
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMessage').textContent = msg;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => toast.classList.add('translate-y-20', 'opacity-0'), 2000);
+        }
+
+        function generateUniqueUsername(usedNames) {
+            const suffixes = [() => "", () => Math.floor(Math.random() * 99), () => Math.floor(Math.random() * 999), () => "X", () => "Dev", () => "HQ"];
+            let attempts = 0;
+            while (attempts < 100) {
+                const type = Math.random();
+                let base = "";
+                if (type < 0.4) base = NAME_PARTS.prefix[Math.floor(Math.random()*NAME_PARTS.prefix.length)] + NAME_PARTS.suffix[Math.floor(Math.random()*NAME_PARTS.suffix.length)];
+                else if (type < 0.8) base = NAME_PARTS.funny[Math.floor(Math.random()*NAME_PARTS.funny.length)] + NAME_PARTS.funny[Math.floor(Math.random()*NAME_PARTS.funny.length)];
+                else base = NAME_PARTS.prefix[Math.floor(Math.random()*NAME_PARTS.prefix.length)] + NAME_PARTS.funny[Math.floor(Math.random()*NAME_PARTS.funny.length)];
+                const name = base + suffixes[Math.floor(Math.random()*suffixes.length)]();
+                if (!usedNames.has(name)) return name;
+                attempts++;
+            }
+            return "User" + Math.random().toString(36).substring(2, 7);
+        }
+
+        async function generateGroup() {
+            const input = document.getElementById('emailInput').value.trim();
+            if (!input.toLowerCase().endsWith('@gmail.com')) {
+                document.getElementById('error').classList.remove('hidden');
+                return;
+            }
+            document.getElementById('error').classList.add('hidden');
+            const btnText = document.getElementById('btnText');
+            const btnSpinner = document.getElementById('btnSpinner');
+            btnText.textContent = "Syncing...";
+            btnSpinner.classList.remove('hidden');
+
+            const userPart = input.split('@')[0];
+            const emails = [];
+            function getDots(curr, rem) {
+                if (rem.length === 0) { emails.push(curr + '@gmail.com'); return; }
+                getDots(curr + rem[0], rem.substring(1));
+                if (rem.substring(1).length > 0) getDots(curr + rem[0] + '.', rem.substring(1));
+            }
+            getDots('', userPart);
+
+            const usedNames = new Set();
+            const newIdentities = emails.map((email, i) => {
+                const name = generateUniqueUsername(usedNames);
+                usedNames.add(name);
+                return { id: i, username: name, email: email, active: false };
+            });
+
+            const newGroup = { groupId: 'grp' + Date.now(), baseEmail: input, identities: newIdentities };
+            await saveGroupToCloud(newGroup);
+            groupRegistry.unshift(newGroup);
+            btnText.textContent = "Create Group";
+            btnSpinner.classList.add('hidden');
+            document.getElementById('resultArea').classList.remove('hidden');
+            document.getElementById('emailInput').value = "";
+            filterMatrix();
+            showToast("Synced to Neon");
+        }
+
+        function filterMatrix() {
+            const q = document.getElementById('searchInput').value.toLowerCase();
+            renderRegistry(q);
+        }
+
+        function renderRegistry(query = "") {
+            const container = document.getElementById('groupsList');
+            container.innerHTML = '';
+            let total = 0;
+
+            groupRegistry.forEach((group) => {
+                const filteredIds = group.identities.filter(id => 
+                    id.username.toLowerCase().includes(query) || id.email.toLowerCase().includes(query)
+                );
+                if (filteredIds.length === 0 && query !== "") return;
+                const activeCount = group.identities.filter(i => i.active).length;
+                const totalInGroup = group.identities.length;
+                const percentage = Math.round((activeCount / totalInGroup) * 100);
+                const groupDiv = document.createElement('div');
+                groupDiv.className = "group-container animate-fade";
+                let rowsHtml = "";
+                filteredIds.forEach((item) => {
+                    total++;
+                    rowsHtml += `
+                        <div class="data-row ${item.active ? 'active-acc' : ''}">
+                            <div class="flex-shrink-0 w-4">
+                                <input type="checkbox" ${item.active ? 'checked' : ''} 
+                                       onchange="toggleActive('${group.groupId}', ${item.id})" 
+                                       class="w-4 h-4 rounded border-slate-700 bg-black text-indigo-600 focus:ring-indigo-500">
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <input type="text" value="${item.username}" 
+                                       onchange="updateUsername(${item.id}, this.value)"
+                                       class="w-full bg-transparent border-none hover:border-slate-600 focus:border-indigo-500 outline-none mono text-[13px] py-0.5 transition-all font-medium text-inherit truncate">
+                            </div>
+                            <div class="flex-1 min-w-0 text-[11px] mono text-slate-500 truncate">${item.email}</div>
+                            <div class="flex-shrink-0 ml-2">
+                                <button onclick="copyRow('${group.groupId}', ${item.id})" class="p-1 text-slate-500 hover:text-white transition-colors">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                });
+                groupDiv.innerHTML = `
+                    <div class="bg-slate-900/80 px-4 py-3 border-b border-white/5">
+                        <div class="flex justify-between items-center">
+                            <div class="flex items-center gap-3 truncate">
+                                <div class="p-1.5 bg-indigo-500/10 rounded-md">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                                    </svg>
+                                </div>
+                                <div class="truncate"><div class="text-xs font-bold text-white truncate">${group.baseEmail}</div></div>
+                            </div>
+                            <div class="flex items-center gap-4">
+                                <div class="text-right"><div class="text-[11px] font-bold ${activeCount === 0 ? 'text-slate-500' : 'text-green-400'}">${activeCount}/${totalInGroup}</div></div>
+                                <button onclick="deleteGroup('${group.docId}')" class="p-1 text-slate-500 hover:text-red-400 transition-colors">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="mt-2 h-0.5 w-full bg-slate-700 rounded-full overflow-hidden">
+                            <div class="h-full bg-indigo-500 transition-all duration-500" style="width: ${percentage}%"></div>
+                        </div>
+                    </div>
+                    <div class="max-h-[40vh] overflow-y-auto custom-scroll">${rowsHtml}</div>
+                `;
+                container.appendChild(groupDiv);
+            });
+            document.getElementById('totalCount').textContent = total.toLocaleString();
+        }
+
+        async function toggleActive(gid, id) {
+            const group = groupRegistry.find(g => g.groupId === gid);
+            const item = group.identities.find(i => i.id === id);
+            item.active = !item.active;
+            await updateCloudGroup(id, { active: item.active });
+            filterMatrix();
+            showToast(item.active ? "Verified" : "Pending");
+        }
+
+        async function updateUsername(id, val) {
+            await updateCloudGroup(id, { username: val });
+            showToast("Updated in Neon");
+        }
+
+        function copyRow(gid, id) {
+            const group = groupRegistry.find(g => g.groupId === gid);
+            const item = group.identities.find(i => i.id === id);
+            navigator.clipboard.writeText(`User: ${item.username} | Email: ${item.email}`);
+            showToast("Copied");
+        }
+
+        async function deleteGroup(groupId) {
+            if(confirm("Permanently delete this group from Neon?")) {
+                await deleteCloudGroup(groupId);
+                groupRegistry = groupRegistry.filter(g => g.groupId !== groupId);
+                filterMatrix();
+                showToast("Neon Deleted");
+            }
+        }
+    </script>
+</body>
+</html>
