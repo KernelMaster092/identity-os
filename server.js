@@ -11,7 +11,7 @@ app.use(express.json());
 app.use(cors());
 
 // FIX: Go UP one level from /api to find the /public folder
-app.use(express.static(path.join(__dirname, '../public')));
+app.use(express.static(path.join(__dirname, 'public')));
 
 // DATABASE CONNECTION - Wrapped in try/catch to prevent total server crash
 let pool;
@@ -156,7 +156,7 @@ app.delete('/api/identities/group/:groupId', authenticateToken, async (req, res)
 
 // FIX: Go UP one level from /api to find the /public/index.html
 app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../public', 'index.html'));
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 if (process.env.NODE_ENV !== 'production') {
