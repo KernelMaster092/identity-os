@@ -9,10 +9,20 @@ const path = require('path');
 const app = express();
 app.use(express.json());
 app.use(cors());
-app.use(express.static('public'));
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-const JWT_SECRET = process.env.JWT_SECRET;
+// FIX 1: Use absolute path for static files to prevent "Cannot GET /"
+app.use(express.static(path.join(__dirname, 'public')));
+
+const pool = new Pool({ 
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false 
+});
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_for_dev';
+
+// HEALTH CHECK: Visit your-url.vercel.app/health to see if server is alive
+app.get('/health', (req, res) => {
+    res.json({ status: 'ok', message: 'Server is running!' });
+});
 
 async function initDb() {
     try {
@@ -80,8 +90,12 @@ app.post('/api/login', async (req, res) => {
 });
 
 app.get('/api/identities', authenticateToken, async (req, res) => {
-    const result = await pool.query('SELECT * FROM identities WHERE user_id = $1 ORDER BY created DESC', [req.user.id]);
-    res.json(result.rows);
+    try {
+        const result = await pool.query('SELECT * FROM identities WHERE user_id = $1 ORDER BY created DESC', [req.user.id]);
+        res.json(result.rows);
+    } catch (e) {
+        res.status(500).json({ error: "Fetch failed" });
+    }
 });
 
 app.post('/api/identities', authenticateToken, async (req, res) => {
@@ -121,10 +135,11 @@ app.delete('/api/identities/group/:groupId', authenticateToken, async (req, res)
     }
 });
 
+// Fallback route to serve index.html for all non-API requests
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
-
-
-// Only start the server if NOT running on Vercel
 if (process.env.NODE_ENV !== 'production') {
     const PORT = process.env.PORT || 3000;
     app.listen(PORT, () => {
@@ -132,4 +147,4 @@ if (process.env.NODE_ENV !== 'production') {
     });
 }
 
-module.exports = app; // This is REQUIRED for Vercel
+module.exports = app;
