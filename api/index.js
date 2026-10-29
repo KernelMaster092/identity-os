@@ -10,21 +10,34 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// FIX 1: Use absolute path for static files to prevent "Cannot GET /"
-app.use(express.static(path.join(__dirname, 'public')));
+// FIX: Go UP one level from /api to find the /public folder
+app.use(express.static(path.join(__dirname, '../public')));
 
-const pool = new Pool({ 
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false 
-});
+// DATABASE CONNECTION - Wrapped in try/catch to prevent total server crash
+let pool;
+try {
+    pool = new Pool({ 
+        connectionString: process.env.DATABASE_URL,
+        ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false 
+    });
+    console.log("✅ DB Pool Initialized");
+} catch (err) {
+    console.error("❌ DB Connection Error:", err);
+}
+
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_for_dev';
 
-// HEALTH CHECK: Visit your-url.vercel.app/health to see if server is alive
+// HEALTH CHECK: Visit your-url.vercel.app/health
 app.get('/health', (req, res) => {
-    res.json({ status: 'ok', message: 'Server is running!' });
+    res.json({ 
+        status: 'ok', 
+        message: 'Server is running!',
+        db_configured: !!process.env.DATABASE_URL 
+    });
 });
 
 async function initDb() {
+    if (!pool) return;
     try {
         await pool.query(`
             CREATE TABLE IF NOT EXISTS users (
@@ -63,6 +76,7 @@ const authenticateToken = (req, res, next) => {
 };
 
 app.post('/api/signup', async (req, res) => {
+    if (!pool) return res.status(500).json({ error: "Database not connected" });
     const { email, password } = req.body;
     try {
         const hashedPassword = await bcrypt.hash(password, 10);
@@ -74,6 +88,7 @@ app.post('/api/signup', async (req, res) => {
 });
 
 app.post('/api/login', async (req, res) => {
+    if (!pool) return res.status(500).json({ error: "Database not connected" });
     const { email, password } = req.body;
     try {
         const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
@@ -90,6 +105,7 @@ app.post('/api/login', async (req, res) => {
 });
 
 app.get('/api/identities', authenticateToken, async (req, res) => {
+    if (!pool) return res.status(500).json({ error: "Database not connected" });
     try {
         const result = await pool.query('SELECT * FROM identities WHERE user_id = $1 ORDER BY created DESC', [req.user.id]);
         res.json(result.rows);
@@ -99,6 +115,7 @@ app.get('/api/identities', authenticateToken, async (req, res) => {
 });
 
 app.post('/api/identities', authenticateToken, async (req, res) => {
+    if (!pool) return res.status(500).json({ error: "Database not connected" });
     const { groupId, baseEmail, identities } = req.body;
     try {
         for (const iden of identities) {
@@ -114,6 +131,7 @@ app.post('/api/identities', authenticateToken, async (req, res) => {
 });
 
 app.patch('/api/identities/:id', authenticateToken, async (req, res) => {
+    if (!pool) return res.status(500).json({ error: "Database not connected" });
     const { active, username } = req.body;
     try {
         await pool.query(
@@ -127,6 +145,7 @@ app.patch('/api/identities/:id', authenticateToken, async (req, res) => {
 });
 
 app.delete('/api/identities/group/:groupId', authenticateToken, async (req, res) => {
+    if (!pool) return res.status(500).json({ error: "Database not connected" });
     try {
         await pool.query('DELETE FROM identities WHERE group_id = $1 AND user_id = $2', [req.params.groupId, req.user.id]);
         res.json({ success: true });
@@ -135,15 +154,15 @@ app.delete('/api/identities/group/:groupId', authenticateToken, async (req, res)
     }
 });
 
-// Fallback route to serve index.html for all non-API requests
+// FIX: Go UP one level from /api to find the /public/index.html
 app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    res.sendFile(path.join(__dirname, '../public', 'index.html'));
 });
 
 if (process.env.NODE_ENV !== 'production') {
     const PORT = process.env.PORT || 3000;
     app.listen(PORT, () => {
-        console.log(`🚀 Server running on http://localhost:${PORT}`);
+        console.log(`🚀 Local: http://localhost:${PORT}`);
     });
 }
 
